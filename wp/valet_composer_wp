@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Ask user for theme name with bemenu as interface
+THEME_NAME=$(echo "" | bemenu --prompt "Enter theme name: " --no-exec --line-height 55 --fn "JetBrainsMonoNerdFontMono 20" --tb "#15191c" --tf "#eb4d4b" --fb "#15191c" --ff "#d3c6aa" --nb "#15191c" --nf "#4b565c" --hb "#15191c" --hf "#d3c6aa" --fbb "#15191c" --fbf "#d3c6aa" --sb "#15191c" --sf "#d3c6aa" --ab "#15191c" --af "#4b565c" --bdr "#4b565c") &&
+    [[ -n "$THEME_NAME" ]] || exit
+
+# ADMIN_PASS=$(echo "" | bemenu --prompt "Enter admin password: " --password --line-height 55 --fn "JetBrainsMonoNerdFontMono 20" --tb "#15191c" --tf "#eb4d4b" --fb "#15191c" --ff "#d3c6aa" --nb "#15191c" --nf "#4b565c" --hb "#15191c" --hf "#d3c6aa" --fbb "#15191c" --fbf "#d3c6aa" --sb "#15191c" --sf "#d3c6aa" --ab "#15191c" --af "#4b565c" --bdr "#4b565c") &&
+#     [[ -n "$ADMIN_PASS" ]] || exit
+
+mkdir ~/.local/share/Sites/"${THEME_NAME}" || exit
+
+cp ~/.local/src/composer.json ~/.local/share/Sites/"${THEME_NAME}" &&
+    cd ~/.local/share/Sites/"${THEME_NAME}" || exit &&
+    cp "$HOME"/.local/src/auth.json .
+
+composer install
+
+new_db_wordpress "${THEME_NAME}" admin
+
+wp config create --dbname="${THEME_NAME}" --dbuser=root --dbpass=password --dbhost=localhost --path=/home/ryanm/.local/share/Sites/"${THEME_NAME}"/public_html
+# wp db create --path=/home/ryanm/.local/share/Sites/"${THEME_NAME}"/public_html
+wp core install --url=https://"${THEME_NAME}".local --title="${THEME_NAME}" --admin_user=admin --admin_password="password" --admin_email=wp@dhali.com --path=/home/ryanm/.local/share/Sites/"${THEME_NAME}"/public_html
+
+cd public_html || exit && wp_composer_plugins "${THEME_NAME}"
+# cd public_html || exit && wp_composer_plugins "wp-${THEME_NAME}" "$(wp option get siteurl)"
+
+cd "$HOME"/.local/share/Sites/"${THEME_NAME}"/public_html || exit && wp plugin activate wp-migrate-db-pro
+
+new_underscores "${THEME_NAME}"
+
+valet link "${THEME_NAME}" && valet secure "${THEME_NAME}"
+
+wp theme activate "${THEME_NAME}"

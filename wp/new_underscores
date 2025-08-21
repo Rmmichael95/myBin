@@ -1,0 +1,26 @@
+#!/usr/bin/bash
+
+EXPECTED_ARGS=1
+E_BADARGS=65
+
+if [ $# -ne $EXPECTED_ARGS ]; then
+    echo "Usage: $0 theme_name"
+    exit $E_BADARGS
+fi
+
+THEME_NAME="$1"
+
+# Get underscores and change names in files as per instructions in repo README w/fd & sed
+git clone https://github.com/Rmmichael95/Starter_Theme_WP.git /tmp/"${THEME_NAME}" 2>/tmp/underscores_err && {
+    fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/'_s'/'${THEME_NAME}'/" {}
+    fd . --type f --extension css /tmp/"${THEME_NAME}"/ --exec sed -i "s/Text Domain: _s/Text Domain: ${THEME_NAME}/" {}
+    fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/ _s/ ${THEME_NAME}/" {}
+    fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/_s-/${THEME_NAME}-/" {}
+    fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/_S_/${THEME_NAME^^}/" {}
+    fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/_s_/${THEME_NAME}_/" {}
+}
+
+cd /tmp || $(notify-send "FAIL: ${THEME_NAME}" && exit) && mv "${THEME_NAME}" ~/.local/share/Sites/"${THEME_NAME}"/public_html/wp-content/themes || $(notify-send "FAIL: ${THEME_NAME}" && exit)
+
+# Return THEME_NAME to finish
+notify-send "${THEME_NAME}" && rm /tmp/underscores_err || $(notify-send "FAIL: rm err" && exit)

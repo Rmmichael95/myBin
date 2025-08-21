@@ -1,0 +1,50 @@
+#!/bin/zsh
+
+EXPECTED_ARGS=1
+E_BADARGS=65
+
+if [ $# -ne $EXPECTED_ARGS ]; then
+    echo "Usage: $0 theme_name"
+    exit $E_BADARGS
+fi
+
+#cd ~/.local/share/Sites/"$1" || exit && cp "$HOME"/.local/src/auth.json auth.json
+#echo "define( 'ACF_PRO_LICENSE', 'b3JkZXJfaWQ10ODk2NTR8dHlwZT1kZXZlbG9wZXJ8ZGF0ZT0yMDE2LTA5LTE0IDE4OjQyOjIx' );" >>"$HOME/.local/share/Sites/$1/public_html/wp-config.php"
+# echo "
+# \$json_data = file_get_contents('../auth.json');
+# \$data = json_decode(\$json_data, true);
+# \$acf_key = \$data['http-basic']['connect.advancedcustomfields.com']['username'];
+# define( 'ACF_PRO_LICENSE', \$acf_key );
+# " >> "$HOME/.local/share/Sites/$1/public_html/wp-config.php"
+
+#echo "
+#\$json_data = file_get_contents('../auth.json');
+#\$data = json_decode(\$json_data, true);
+#\$acf_key = \$data['http-basic']['connect.advancedcustomfields.com']['username'];
+#define( 'API_TOKEN', \$acf_key );
+
+#$api_key = $data['http-basic']['fontawesome']['api_key'];
+#define( 'ACF_PRO_LICENSE', $api_key );
+#" >> "$HOME/.local/share/Sites/$1/public_html/wp-config.php"
+
+# echo "
+# \$json_data = file_get_contents('../env.json');
+# \$data = json_decode(\$json_data, true);
+# \$wpmdb_key = \$data['wp-migrate-db-pro']['key'];
+# define( 'WPMDB_LICENCE', \$wpmdb_key );
+# " >> "$HOME/.local/share/Sites/$1/public_html/wp-config.php"
+
+# echo "
+# require_once(__DIR__ . '/../vendor/autoload.php');
+# $dotenv = Dotenv\Dotenv::createImmutable(__DIR__.'/../');
+# $dotenv->load();
+#
+# define('WPMDB_LICENCE', getenv('WPMDB_LICENCE'));
+# " >> "$HOME/.local/share/Sites/$1/public_html/wp-config.php"
+
+echo "
+define( 'WPMDB_LICENCE', 'a3111687-7f85-471f-99e2-cca0c777df11' );
+" >> "$HOME/.local/share/Sites/$1/public_html/wp-config.php"
+
+
+#cd ~/.local/share/Sites/"$1" || exit && sed --expression "s@{URL}@${INPUT}@g" "$HOME/.local/src/auth.json" >auth.json

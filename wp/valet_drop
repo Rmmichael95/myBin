@@ -1,0 +1,17 @@
+#!/bin/sh
+
+EXPECTED_ARGS=1
+E_BADARGS=65
+MYSQL=$(which mariadb)
+
+Q1="DROP DATABASE $1;"
+Q3="FLUSH PRIVILEGES;"
+SQL="${Q1}${Q2}"
+
+if [ $# -ne $EXPECTED_ARGS ]; then
+    echo "Usage: $0 site_name"
+    exit $E_BADARGS
+fi
+
+$MYSQL --defaults-file=/home/ryanm/.local/share/mysql/config -e "$SQL"
+rm -rf $HOME/.local/share/Sites/"$1"

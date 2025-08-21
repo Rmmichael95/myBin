@@ -1,0 +1,4 @@
+mlr --csv uniq -a < master-archive-2025.csv >>master-archive-2025-u.csv
+rg -w -n '.*@.*.com,\d{1,2}/\d{1,2}/2025|\d{1,2}/\d{1,2}/2025 ' master-archive-clean.csv
+sed 's/$/d/' num.txt >num.sed
+sed -i -f num.sed master-archive-clean.csv
