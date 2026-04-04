@@ -2,7 +2,14 @@
 
 EXPECTED_ARGS=2
 E_BADARGS=65
-MYSQL=$(which mariadb)
+MYSQL=$(which mysql)
+
+# Must setup user admin in mysql or mariadb before first run
+# mysql -u root -p
+# or
+# mariadb -u root -p
+# and run
+# CREATE USER 'admin'@'localhost' IDENTIFIED BY 'password';
 
 Q1="CREATE DATABASE IF NOT EXISTS $1;"
 Q2="GRANT ALL ON $1.* TO '$2'@'localhost';"

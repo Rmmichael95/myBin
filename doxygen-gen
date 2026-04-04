@@ -1,0 +1,11 @@
+#!/bin/sh
+
+mkdir Doxygen && cd Doxygen
+
+doxygen -g
+
+sed -Ei "s/INPUT +=/INPUT = ..\/src/" Doxyfile
+
+doxygen Doxyfile
+
+xdg-open html/index.html

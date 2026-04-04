@@ -18,6 +18,8 @@ git clone https://github.com/Rmmichael95/Starter_Theme_WP.git /tmp/"${THEME_NAME
     fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/_s-/${THEME_NAME}-/" {}
     fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/_S_/${THEME_NAME^^}/" {}
     fd . --type f /tmp/"${THEME_NAME}"/ --exec sed -i "s/_s_/${THEME_NAME}_/" {}
+    sed -i "s/'_s'/'${THEME_NAME}'"/ /tmp/"${THEME_NAME}"/style.css
+    mv /tmp/"${THEME_NAME}"/languages/_s.pot /tmp/"${THEME_NAME}"/languages/"${THEME_NAME}.pot"
 }
 
 cd /tmp || $(notify-send "FAIL: ${THEME_NAME}" && exit) && mv "${THEME_NAME}" ~/.local/share/Sites/"${THEME_NAME}"/public_html/wp-content/themes || $(notify-send "FAIL: ${THEME_NAME}" && exit)

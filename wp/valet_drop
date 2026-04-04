@@ -2,7 +2,7 @@
 
 EXPECTED_ARGS=1
 E_BADARGS=65
-MYSQL=$(which mariadb)
+MYSQL=$(which mysql)
 
 Q1="DROP DATABASE $1;"
 Q3="FLUSH PRIVILEGES;"
