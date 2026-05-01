@@ -1,0 +1,3 @@
+#!/bin/sh
+
+uwsm-app -a com.slack.Slack
