@@ -1,0 +1,55 @@
+#!/bin/sh
+# ~/.local/bin/myBin/media/osd
+#
+# SwayOSD wrapper with wpctl / brightnessctl fallback.
+# If swayosd-server is not running, the raw backend command runs instead —
+# so volume and brightness always work even if the OSD daemon is down.
+#
+# Usage (called from keybindings.conf):
+#   osd vol-up | vol-down | vol-mute | mic-mute | bright-up | bright-down
+#
+# chmod +x ~/.local/bin/myBin/media/osd
+
+OSD_CLIENT="swayosd-client"
+
+# Check server is live without spawning a subshell per call
+has_osd() {
+    pgrep -x swayosd-server >/dev/null 2>&1
+}
+
+case "$1" in
+vol-up)
+    has_osd &&
+        $OSD_CLIENT --output-volume raise --max-volume 150 ||
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+    ;;
+vol-down)
+    has_osd &&
+        $OSD_CLIENT --output-volume lower ||
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+    ;;
+vol-mute)
+    has_osd &&
+        $OSD_CLIENT --output-volume mute-toggle ||
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+    ;;
+mic-mute)
+    has_osd &&
+        $OSD_CLIENT --input-volume mute-toggle ||
+        wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+    ;;
+bright-up)
+    has_osd &&
+        $OSD_CLIENT --brightness raise ||
+        brightnessctl set 5%+
+    ;;
+bright-down)
+    has_osd &&
+        $OSD_CLIENT --brightness lower ||
+        brightnessctl set 5%-
+    ;;
+*)
+    printf 'Usage: osd <vol-up|vol-down|vol-mute|mic-mute|bright-up|bright-down>\n' >&2
+    exit 1
+    ;;
+esac
