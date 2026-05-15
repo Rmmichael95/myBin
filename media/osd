@@ -25,12 +25,12 @@ vol-up)
     ;;
 vol-down)
     has_osd &&
-        $OSD_CLIENT --output-volume lower ||
+        $OSD_CLIENT --output-volume lower --max-volume 150 ||
         wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
     ;;
 vol-mute)
     has_osd &&
-        $OSD_CLIENT --output-volume mute-toggle ||
+        $OSD_CLIENT --output-volume mute-toggle --max-volume 150 ||
         wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
     ;;
 mic-mute)
