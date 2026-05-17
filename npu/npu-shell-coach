@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# Real-time NPU Terminal Coach with Event Deduplication Guard
+# Real-time NPU Terminal Coach - Full Matrix Context Engine
 
 [[ -f "$HOME/.profile" ]] && source "$HOME/.profile"
 
@@ -10,15 +10,13 @@ until curl -s -o /dev/null "http://127.0.0.1:52625/v1/models"; do
     sleep 3
 done
 
-echo "NPU Shell Coach active. Monitoring history with deduplication tracking..."
+echo "NPU Shell Coach active. Monitoring history with full alias matrix context..."
 
-# Initialize a state memory cell to catch duplicate fast-flushes
 local LAST_CMD=""
 
 inotifywait -m -e modify,close_write,moved_to --format '%w%f' "$HISTORY_FILE" | while read -r FILE; do
     RAW_CMD=$(tail -n 1 "$HISTORY_FILE" | sed 's/^: *[0-9]*:[0-9]*;//')
 
-    # 1. Fast-fail basic constraints to reduce overhead
     if [[ -z "${RAW_CMD// }" ]] || [[ ${#RAW_CMD} -lt 5 ]]; then
         continue
     fi
@@ -26,38 +24,32 @@ inotifywait -m -e modify,close_write,moved_to --format '%w%f' "$HISTORY_FILE" | 
         continue
     fi
 
-    # 2. BULLETPROOF DEDUPLICATION GUARD
-    # If the file watcher woke up twice for the same command line, discard the echo pass
     if [[ "$RAW_CMD" == "$LAST_CMD" ]]; then
         continue
     fi
     LAST_CMD="$RAW_CMD"
 
-    # Tokenize the command string into an explicit OR regex pattern
-    local DYNAMIC_PATTERN=$(echo "$RAW_CMD" | grep -oE '[a-zA-Z0-9_-]+' | paste -sd '|' -)
-
-    local MATCHING_ALIASES=""
-    if [[ -f "$ALIAS_FILE" && -n "$DYNAMIC_PATTERN" ]]; then
-        MATCHING_ALIASES=$(rg -E "$DYNAMIC_PATTERN" "$ALIAS_FILE" 2>/dev/null | head -n 5)
-    fi
+    # INGEST THE ENTIRE ALIAS MATRIX DIRECTLY INTO MEMORY
+    local ALIAS_MATRIX=""
+    [[ -f "$ALIAS_FILE" ]] && ALIAS_MATRIX=$(cat "$ALIAS_FILE" | grep -v '^#' | grep -v '^$')
 
     SYS_PROMPT="You are a strict terminal optimization engine. Review the user command.
 
-RELEVANT PERSONAL ALIASES:
-$MATCHING_ALIASES
+FULL PERSONAL ALIAS MATRIX:
+$ALIAS_MATRIX
 
 CRITICAL INSTRUCTIONS:
-1. TARGETED UTILITIES: [find, grep, sed, cat]
-2. If the user command contains the word 'find', you MUST convert it to 'fd'.
-3. If the user command contains the word 'grep' (and is not ripgrep), you MUST convert it to 'rg'.
-4. If the user command contains 'cat' piped into another tool, flag it as a Useless Use of Cat (UUOC).
-5. If the command matches a personal alias, explicitly tell the user to use that shortcut instead.
-6. OUTPUT FORMAT: Everything MUST be on a single line. Do not use markdown. NEVER use actual newlines or line breaks. Separate sections strictly using a literal pipe character ( | ). Use the exact layout:
-   Critique: [Explanation] | Legacy: [Original command] | Modern: [Optimized syntax version]
-7. If the user command does NOT use any targeted utilities and does NOT match a personal alias, output EXACTLY the word 'IGNORE'."
+1. ALIAS MATCHING: Review the FULL PERSONAL ALIAS MATRIX section. If the user's command matches the right side or core functional intent of any listed alias (even if they added 'sudo' or minor flags that your alias handles natively), you MUST instruct them to use that personal alias shortcut instead.
+2. TARGETED UTILITIES: [find, grep, sed, cat]
+3. If the user command contains 'find', convert it to 'fd'.
+4. If the user command contains 'grep' (and is not ripgrep), convert it to 'rg'.
+5. If the user command contains 'cat' piped into another tool, flag it as a Useless Use of Cat (UUOC).
+6. OUTPUT FORMAT: Everything MUST be on a single line separated strictly by a literal pipe character ( | ). Do not use markdown backticks. Follow this exact template:
+   Critique: [Explanation] | Legacy: [Original command] | Modern: [Optimized syntax or alias version]
+7. If no optimizations or alias matches apply, output exactly: IGNORE"
 
     PAYLOAD=$(jq -n \
-        --arg model "llama3.2:3b" \
+        --arg model "llama3.1:8b" \
         --arg sys "$SYS_PROMPT" \
         --arg user "$RAW_CMD" \
         '{
@@ -77,14 +69,20 @@ CRITICAL INSTRUCTIONS:
 
     AI_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null)
 
-    if [[ -z "${AI_TEXT// }" || "$AI_TEXT" == "null" ]]; then
-        AI_TEXT="IGNORE"
+    if [[ -z "${AI_TEXT// }" || "$AI_TEXT" == "null" || "$AI_TEXT" == "IGNORE"* ]]; then
+        continue
+    fi
+
+    # CLIENT-SIDE VERIFICATION GUARD
+    local modern_val=$(echo "$AI_TEXT" | awk -F '|' '{for(i=1;i<=NF;i++) if($i ~ /Modern:/) print $i}' | sed 's/.*Modern: //;s/^[ \t]*//;s/[ \t]*$//')
+    local legacy_val=$(echo "$AI_TEXT" | awk -F '|' '{for(i=1;i<=NF;i++) if($i ~ /Legacy:/) print $i}' | sed 's/.*Legacy: //;s/^[ \t]*//;s/[ \t]*$//')
+
+    if [[ -z "$modern_val" || "$modern_val" == "$RAW_CMD" || "$modern_val" == "$legacy_val" ]]; then
+        continue
     fi
 
     echo "Evaluated: $RAW_CMD | Response: $AI_TEXT"
 
-    if [[ "$AI_TEXT" != "IGNORE" ]]; then
-        CLEAN_NOTIFY=$(echo "$AI_TEXT" | sed 's/ | /\n/g')
-        notify-send -u normal -t 9000 -a "NPU Shell Coach" "💡 Command Optimization" "$CLEAN_NOTIFY"
-    fi
+    CLEAN_NOTIFY=$(echo "$AI_TEXT" | sed 's/ | /\n/g')
+    notify-send -u normal -t 9000 -a "NPU Shell Coach" "💡 Command Optimization" "$CLEAN_NOTIFY"
 done
