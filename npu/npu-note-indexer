@@ -1,0 +1,88 @@
+#!/usr/bin/env zsh
+# Real-time NPU Hierarchical Chunk Indexer for Neovim Notes
+
+setopt EXTENDED_GLOB
+
+local NOTES_DIR="$HOME/documents/.bc/batcave/Notes"
+local VECTOR_CACHE="$HOME/.local/cache/npu_vectors"
+
+mkdir -p "$VECTOR_CACHE" "$NOTES_DIR"
+sleep 3
+
+echo "NPU Granular Section Indexer active. Watching: $NOTES_DIR"
+
+process_file() {
+    local FILE="$1"
+    local FILE_HASH=$(echo -n "$FILE" | md5sum | awk '{print $1}')
+    local TMP_JSON=$(mktemp)
+
+    # Initialize structural JSON framework
+    echo "{\"filepath\":\"$FILE\",\"chunks\":[]}" > "$TMP_JSON"
+
+    local current_header="Overview"
+    local current_line=1
+    local chunk_buffer=""
+    local line_num=0
+
+    # Parse file line-by-line to extract sections and line counts
+    while IFS= read -r line; do
+        ((line_num++))
+
+        # Check for Markdown Header matches
+        if [[ "$line" =~ ^#+\ (.*) ]]; then
+            # If we have accumulated text in the buffer, vectorize the finished chunk
+            if [[ -n "${chunk_buffer// }" ]]; then
+                local SAFE_CONTENT=$(jq -Rs . <<< "$chunk_buffer")
+                local RAW_JSON=$(curl -s http://127.0.0.1:52625/v1/embeddings \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer ${FLM_API_KEY:-lemonade}" \
+                    -d "{\"model\": \"embed-gemma:300m\", \"input\": $SAFE_CONTENT}")
+
+                local EMBEDDING=$(echo "$RAW_JSON" | jq '.data[0].embedding')
+
+                if [[ "$EMBEDDING" != "null" ]]; then
+                    # Append chunk vector, line number metadata, and header context to the JSON array
+                    jq --argjson line "$current_line" \
+                       --arg head "$current_header" \
+                       --argjson emb "$EMBEDDING" \
+                       '.chunks += [{"line": $line, "header": $head, "embedding": $emb}]' \
+                       "$TMP_JSON" > "${TMP_JSON}.tmp" && mv "${TMP_JSON}.tmp" "$TMP_JSON"
+                fi
+            fi
+
+            # Pivot to tracking the new section
+            current_header="${match[1]}"
+            current_line=$line_num
+            chunk_buffer="$line"
+        else
+            chunk_buffer+=$'\n'"$line"
+        fi
+    done < "$FILE"
+
+    # Vectorize the trailing chunk block remaining at EOF
+    if [[ -n "${chunk_buffer// }" ]]; then
+        local SAFE_CONTENT=$(jq -Rs . <<< "$chunk_buffer")
+        local RAW_JSON=$(curl -s http://127.0.0.1:52625/v1/embeddings \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${FLM_API_KEY:-lemonade}" \
+            -d "{\"model\": \"embed-gemma:300m\", \"input\": $SAFE_CONTENT}")
+        local EMBEDDING=$(echo "$RAW_JSON" | jq '.data[0].embedding')
+        if [[ "$EMBEDDING" != "null" ]]; then
+            jq --argjson line "$current_line" \
+               --arg head "$current_header" \
+               --argjson emb "$EMBEDDING" \
+               '.chunks += [{"line": $line, "header": $head, "embedding": $emb}]' \
+               "$TMP_JSON" > "${TMP_JSON}.tmp" && mv "${TMP_JSON}.tmp" "$TMP_JSON"
+        fi
+    fi
+
+    mv "$TMP_JSON" "$VECTOR_CACHE/${FILE_HASH}.json"
+    logger -t npu_indexer "Generated structural sections for ${FILE:t}"
+}
+
+# Real-time monitoring loop via inotifywait
+inotifywait -m -r -e close_write,moved_to --format '%w%f' "$NOTES_DIR" | while read -r FILE; do
+    if [[ "$FILE" == *.md ]]; then
+        process_file "$FILE"
+    fi
+done

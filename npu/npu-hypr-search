@@ -1,0 +1,23 @@
+#!/usr/bin/env zsh
+# Global Hyprland trigger for NPU Semantic Note Search via bemenu
+
+# Exit immediately if an unhandled tracking fault occurs
+set -e
+
+# 1. Prompt the user for the concept using bemenu
+# Passing an empty string initializes the dynamic launcher canvas
+local query=$(echo "" | bemenu -p "💡 AI Concept Search:" --tf="#88c0d0" --hf="#a3be8c")
+
+# Strip whitespace and exit cleanly if the user aborted (pressed Escape)
+[[ -z "${query// }" ]] && exit 0
+
+# 2. Execute the compiled Go binary to fetch mathematically ranked paths
+# Pipe the stdout stream straight into a multi-line vertical bemenu selection window
+local target_file=$("${0:A:h}/npu-search" "$query" | bemenu -p "📝 Notes:" -l 10 --tf="#ebcb8b" --hf="#a3be8c")
+
+# Exit cleanly if no file path was explicitly confirmed
+[[ -z "$target_file" ]] && exit 0
+
+# 3. Launch Ghostty and execute Neovim directly into the chosen markdown target
+# Wrapped tightly using uwsm app tracking to maintain strict systemd cgroup hierarchy
+exec systemd-cat -t npu_hypr_open uwsm app -- ghostty -e nvim "$target_file"

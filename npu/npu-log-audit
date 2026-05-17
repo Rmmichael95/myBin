@@ -1,0 +1,36 @@
+#!/usr/bin/env zsh
+# Systemd Journal Auditor via Qwen 4B
+
+# Pull the last 200 lines of priority 3 (err) or higher logs
+local LOGS=$(journalctl -p 3 -n 200 --no-pager)
+
+# Exit cleanly if there are no errors to report
+[[ -z "$LOGS" ]] && exit 0
+
+local SAFE_LOGS=$(echo "$LOGS" | jq -Rs .)
+
+# Query the NPU
+local RESPONSE=$(curl -s http://localhost:52625/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${FLM_API_KEY:-lemonade}" \
+  -d "{
+    \"model\": \"qwen3.5:4b\",
+    \"temperature\": 0.1,
+    \"messages\": [
+      {
+        \"role\": \"system\",
+        \"content\": \"You are a strict Arch Linux kernel and systemd analyst. Review the provided journalctl logs. Ignore standard desktop application noise, harmless warnings, or temporary network drops. If you detect critical hardware degradation, ZFS/Btrfs corruption, OOM kills, or severe systemd looping, return a concise 2-bullet summary. If the logs are routine, reply ONLY with the word 'IGNORE'.\"
+      },
+      {
+        \"role\": \"user\",
+        \"content\": $SAFE_LOGS
+      }
+    ]
+  }")
+
+local EVALUATION=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+
+# Check if evaluation contains actual data and isn't just ignoring
+if [[ "$EVALUATION" != *"IGNORE"* && -n "$EVALUATION" ]]; then
+    notify-send -u critical "NPU System Audit Warning" "$EVALUATION"
+fi
