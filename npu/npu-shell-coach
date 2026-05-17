@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# Real-time NPU Terminal Coach - Full Matrix Context Engine
+# Real-time NPU Terminal Coach - Strict String Sanitization Engine
 
 [[ -f "$HOME/.profile" ]] && source "$HOME/.profile"
 
@@ -10,7 +10,7 @@ until curl -s -o /dev/null "http://127.0.0.1:52625/v1/models"; do
     sleep 3
 done
 
-echo "NPU Shell Coach active. Monitoring history with full alias matrix context..."
+echo "NPU Shell Coach active. Monitoring with hardened client guards..."
 
 local LAST_CMD=""
 
@@ -29,7 +29,6 @@ inotifywait -m -e modify,close_write,moved_to --format '%w%f' "$HISTORY_FILE" | 
     fi
     LAST_CMD="$RAW_CMD"
 
-    # INGEST THE ENTIRE ALIAS MATRIX DIRECTLY INTO MEMORY
     local ALIAS_MATRIX=""
     [[ -f "$ALIAS_FILE" ]] && ALIAS_MATRIX=$(cat "$ALIAS_FILE" | grep -v '^#' | grep -v '^$')
 
@@ -38,18 +37,20 @@ inotifywait -m -e modify,close_write,moved_to --format '%w%f' "$HISTORY_FILE" | 
 FULL PERSONAL ALIAS MATRIX:
 $ALIAS_MATRIX
 
-CRITICAL INSTRUCTIONS:
-1. ALIAS MATCHING: Review the FULL PERSONAL ALIAS MATRIX section. If the user's command matches the right side or core functional intent of any listed alias (even if they added 'sudo' or minor flags that your alias handles natively), you MUST instruct them to use that personal alias shortcut instead.
-2. TARGETED UTILITIES: [find, grep, sed, cat]
-3. If the user command contains 'find', convert it to 'fd'.
-4. If the user command contains 'grep' (and is not ripgrep), convert it to 'rg'.
-5. If the user command contains 'cat' piped into another tool, flag it as a Useless Use of Cat (UUOC).
-6. OUTPUT FORMAT: Everything MUST be on a single line separated strictly by a literal pipe character ( | ). Do not use markdown backticks. Follow this exact template:
+CRITICAL INSTRUCTIONS (STRICT HIERARCHY):
+1. PRIORITY 1 - TOTAL ALIAS MATCH: Review the FULL PERSONAL ALIAS MATRIX. If the user's command matches the functional intent or right-hand side of a custom alias, you MUST set 'Modern:' strictly to that exact alias shortcut. Do not apply any other rules.
+2. PRIORITY 2 - MODERN SYSTEM BINARIES: If and ONLY if NO personal alias covers the command, check for legacy utilities and swap them to modern alternatives:
+   - sudo [command] -> sudo-rs [command]
+   - find [path] -name [pattern] -> fd [pattern] [path]
+   - grep [pattern] [file] -> rg [pattern] [file]
+   - sed 's/[old]/[new]/g' [file] -> sd '[old]' '[new]' [file]
+   - cat [file] | grep [pattern] -> rg [pattern] [file]
+3. OUTPUT FORMAT: Everything MUST be on a single line separated strictly by a literal pipe character ( | ). Do not use markdown backticks. Follow this exact template:
    Critique: [Explanation] | Legacy: [Original command] | Modern: [Optimized syntax or alias version]
-7. If no optimizations or alias matches apply, output exactly: IGNORE"
+4. If no optimizations or alias matches apply, output exactly: IGNORE"
 
     PAYLOAD=$(jq -n \
-        --arg model "llama3.1:8b" \
+        --arg model "qwen3.5:9b" \
         --arg sys "$SYS_PROMPT" \
         --arg user "$RAW_CMD" \
         '{
@@ -73,13 +74,20 @@ CRITICAL INSTRUCTIONS:
         continue
     fi
 
-    # CLIENT-SIDE VERIFICATION GUARD
+    # EXTRACT VALUES FROM THE PIPE GRID
     local modern_val=$(echo "$AI_TEXT" | awk -F '|' '{for(i=1;i<=NF;i++) if($i ~ /Modern:/) print $i}' | sed 's/.*Modern: //;s/^[ \t]*//;s/[ \t]*$//')
     local legacy_val=$(echo "$AI_TEXT" | awk -F '|' '{for(i=1;i<=NF;i++) if($i ~ /Legacy:/) print $i}' | sed 's/.*Legacy: //;s/^[ \t]*//;s/[ \t]*$//')
 
-    if [[ -z "$modern_val" || "$modern_val" == "$RAW_CMD" || "$modern_val" == "$legacy_val" ]]; then
+    # =========================================================================
+    # HARDENED VERIFICATION GUARD
+    # =========================================================================
+    # 1. Drop if fields are empty or unparsed
+    # 2. Drop if Modern is identical to the raw user input or legacy block
+    # 3. Drop if Modern contains the word "IGNORE" (case-insensitive via uppercase zsh conversion)
+    if [[ -z "$modern_val" || "$modern_val" == "$RAW_CMD" || "$modern_val" == "$legacy_val" || "${modern_val:u}" == *"IGNORE"* ]]; then
         continue
     fi
+    # =========================================================================
 
     echo "Evaluated: $RAW_CMD | Response: $AI_TEXT"
 
