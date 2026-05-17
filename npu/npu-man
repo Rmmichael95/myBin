@@ -1,0 +1,140 @@
+#!/usr/bin/env zsh
+# ==============================================================================
+# npu-man-v4: Multi-Target Context Ingestion Engine with Robust JSON Assembly
+# ==============================================================================
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage Layouts:"
+    echo "  npu-man <intent_string_with_or_without_{tools}>"
+    echo "  npu-man <tool> \"<intent>\""
+    echo "  npu-man {tool1,tool2} \"<intent>\""
+    exit 1
+fi
+
+typeset -a TARGET_CMDS
+local USER_INTENT=""
+
+# Step 1: Intelligent Multi-Syntax Argument Slicing
+if [[ $# -gt 1 ]]; then
+    # Last argument is always the user's operational goal
+    USER_INTENT="${@[-1]}"
+    # Preceding arguments are explicit tools (handles brace expansions like fd,magick natively)
+    TARGET_CMDS=("${@[1,-2]}")
+else
+    # Single argument syntax mode
+    USER_INTENT="$1"
+
+    # Extract any tools wrapped inside explicit curly braces within the string
+    if type rg &>/dev/null; then
+        local EXTRACTED_TOOLS=$(echo "$USER_INTENT" | rg -o '\{([a-zA-Z0-9_-]+)\}' -r '$1')
+        if [[ -n "$EXTRACTED_TOOLS" ]]; then
+            while read -r tool; do
+                TARGET_CMDS+=("$tool")
+            done <<< "$EXTRACTED_TOOLS"
+        fi
+    fi
+fi
+
+# Fallback: If no explicit tools are specified, parse the string to spot common tools
+if [[ ${#TARGET_CMDS} -eq 0 ]]; then
+    if type rg &>/dev/null; then
+        # Quick look for common binaries mentioned inside the command string
+        local CORE_MATCHES=$(echo "$USER_INTENT" | rg -o '\b(fd|magick|convert|tar|ffmpeg|git|sed|awk|grep|find|ripgrep|rg|rsync|docker|podman|kubectl)\b' | sort -u)
+        if [[ -n "$CORE_MATCHES" ]]; then
+            while read -r tool; do
+                TARGET_CMDS+=("$tool")
+            done <<< "$CORE_MATCHES"
+        fi
+    fi
+fi
+
+# Ensure loopback endpoint is reachable before parsing docs
+if ! curl -s -m 1 http://127.0.0.1:52625/ > /dev/null; then
+    echo "❌ Error: FastFlowLM server is not running on port 52625."
+    exit 1
+fi
+
+local CONTEXT_BLOCK=""
+
+# Step 2: Loop over all discovered tools to build an aggregated documentation matrix
+if [[ ${#TARGET_CMDS} -gt 0 ]]; then
+    echo "🔍 Triage pipeline aggregating documentation for: (${TARGET_CMDS[*]})"
+
+    for CMD in "${TARGET_CMDS[@]}"; do
+        CONTEXT_BLOCK+="=== DOCUMENTATION LAYER FOR BINARY: $CMD ===\n"
+
+        # Core Definition
+        if type whatis &>/dev/null; then
+            local WHATIS_DATA=$(whatis "$CMD" 2>/dev/null | head -n 1)
+            [[ -n "$WHATIS_DATA" ]] && CONTEXT_BLOCK+="[Definition]: ${WHATIS_DATA}\n"
+        fi
+
+        # High-Density Examples
+        if type tldr &>/dev/null; then
+            local TLDR_DATA=$(tldr "$CMD" 2>/dev/null | sed '/^$/d')
+            [[ -n "$TLDR_DATA" ]] && CONTEXT_BLOCK+="[TLDR Syntax]:\n${TLDR_DATA}\n"
+        fi
+
+        # Deep Structural Fallback Snippets
+        local RAW_REFERENCE=""
+        if type man &>/dev/null; then
+            RAW_REFERENCE=$(MANWIDTH=100 man "$CMD" 2>/dev/null | col -b)
+        elif type info &>/dev/null; then
+            RAW_REFERENCE=$(info "$CMD" --subnodes -o - 2>/dev/null)
+        fi
+
+        if [[ -n "$RAW_REFERENCE" ]]; then
+            if type rg &>/dev/null; then
+                # Isolate matching documentation frames based on core intent keywords
+                local KEYWORDS=$(echo "$USER_INTENT" | rg -o '\b[a-zA-Z0-9_-]{3,}\b' | rg -v '^(how|can|help|want|with|file|from|into|mode|does|type|find|and|for)$' | paste -sd '|' -)
+                if [[ -n "$KEYWORDS" ]]; then
+                    local SLICED_REF=$(echo "$RAW_REFERENCE" | rg -i -C 3 "(${KEYWORDS})" | head -n 60)
+                    [[ -n "$SLICED_REF" ]] && CONTEXT_BLOCK+="[Target Manual Snippets]:\n${SLICED_REF}\n"
+                fi
+            else
+                CONTEXT_BLOCK+="[Manual Base]:\n$(echo "$RAW_REFERENCE" | head -n 100)\n"
+            fi
+        fi
+        CONTEXT_BLOCK+="\n"
+    done
+else
+    echo "⚠️  No specific command extracted. Activating Pure Parametric Weights Mode..."
+    CONTEXT_BLOCK="[System Alert]: No specific manual layers attached. Synthesize the command utilizing base system architecture training."
+fi
+
+# Step 3: Use a strict JQ structure factory payload engine to assemble the API call
+# This completely prevents formatting injections or structural parsing issues
+local SYSTEM_PROMPT="You are an elite Linux automation engineer. You are provided filtered, multi-source reference documentation blocks for system commands alongside a target user goal. Synthesize this data to provide a hyper-focused, non-conversational two-part terminal response: 1. A short, bulleted syntax brief explaining options. 2. A single, clean Markdown code block with the complete executable command line. Omit any conversational introductions or small talk."
+local USER_PROMPT="Aggregated Reference Context:\n$CONTEXT_BLOCK\n\nOperational Intent:\n$USER_INTENT"
+
+local PAYLOAD=$(jq -n \
+    --arg mod "qwen3.5:4b" \
+    --arg sys "$SYSTEM_PROMPT" \
+    --arg usr "$USER_PROMPT" \
+    '{
+        model: $mod,
+        temperature: 0.1,
+        reasoning_effort: "medium",
+        messages: [
+            {role: "system", content: $sys},
+            {role: "user", content: $usr}
+        ]
+    }')
+
+echo "🧠 Streaming context matrix to NPU (Reasoning: medium)..."
+
+local RESPONSE=$(curl -s -X POST http://127.0.0.1:52625/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${FLM_API_KEY:-lemonade}" \
+  -d "$PAYLOAD")
+
+local EVALUATION=$(echo "$RESPONSE" | jq -r '.choices[0].message.content 2>/dev/null')
+
+if [[ -n "$EVALUATION" && "$EVALUATION" != "null" ]]; then
+    echo "\n--- NPU Pipeline Synthesis ---"
+    echo "$EVALUATION"
+    echo "------------------------------"
+else
+    echo "❌ Error: Invalid structure returned by local NPU engine."
+    echo "Raw Server Output Trace: $RESPONSE"
+fi
