@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# Real-time NPU Terminal Coach - Strict String Sanitization Engine
+# Real-time NPU Terminal Coach - Qwen 3.5 High-Speed Reflex Engine
 
 [[ -f "$HOME/.profile" ]] && source "$HOME/.profile"
 
@@ -10,20 +10,21 @@ until curl -s -o /dev/null "http://127.0.0.1:52625/v1/models"; do
     sleep 3
 done
 
-echo "NPU Shell Coach active. Monitoring with hardened client guards..."
+echo "NPU Shell Coach active. Monitoring with hardened Qwen Reflex guards..."
 
 local LAST_CMD=""
 
-inotifywait -m -e modify,close_write,moved_to --format '%w%f' "$HISTORY_FILE" | while read -r FILE; do
+inotifywait -m -e modify,close_write,moved_to --format '%w%f' "$HISTORY_FILE" |
+while read -r FILE; do
     RAW_CMD=$(tail -n 1 "$HISTORY_FILE" | sed 's/^: *[0-9]*:[0-9]*;//')
 
+    # HARD FILTER LAYERS (Bypass trivial commands instantly)
     if [[ -z "${RAW_CMD// }" ]] || [[ ${#RAW_CMD} -lt 5 ]]; then
         continue
     fi
-    if [[ "$RAW_CMD" =~ ^(ls|cd|pwd|clear|journalctl)\  ]]; then
+    if [[ "$RAW_CMD" =~ ^(ls|cd|pwd|clear|journalctl|rg)\  ]]; then
         continue
     fi
-
     if [[ "$RAW_CMD" == "$LAST_CMD" ]]; then
         continue
     fi
@@ -32,27 +33,34 @@ inotifywait -m -e modify,close_write,moved_to --format '%w%f' "$HISTORY_FILE" | 
     local ALIAS_MATRIX=""
     [[ -f "$ALIAS_FILE" ]] && ALIAS_MATRIX=$(cat "$ALIAS_FILE" | grep -v '^#' | grep -v '^$')
 
-    SYS_PROMPT="You are a strict terminal optimization engine. Review the user command.
+    SYS_PROMPT="You are a strict terminal optimization engine running alongside an Arch Linux environment. Review the user's raw command.
 
 FULL PERSONAL ALIAS MATRIX:
 $ALIAS_MATRIX
 
+FEW-SHOT LOGICAL EXAMPLES FOR INTELLECTUAL PATTERN MATCHING:
+- Input: pacman -Ss ripgrep
+  Expected Output: Critique: Searching syncdb can be done with your personal alias shortcut. | Legacy: pacman -Ss ripgrep | Modern: pss ripgrep
+- Input: sudo pacman -Syu
+  Expected Output: Critique: Complete system upgrade maps cleanly to your shortcut matrix. | Legacy: sudo pacman -Syu | Modern: psu
+- Input: grep -i 'error' system.log
+  Expected Output: Critique: Ripgrep (rg) is a significantly faster modern recursive utility. | Legacy: grep -i 'error' system.log | Modern: rg -i 'error' system.log
+- Input: psu
+  Expected Output: IGNORE
+
 CRITICAL INSTRUCTIONS (STRICT HIERARCHY):
-1. PRIORITY 1 - TOTAL ALIAS MATCH: Review the FULL PERSONAL ALIAS MATRIX. If the user's command matches the functional intent or right-hand side of a custom alias, you MUST set 'Modern:' strictly to that exact alias shortcut. Do not apply any other rules.
-2. PRIORITY 2 - MODERN SYSTEM BINARIES: If and ONLY if NO personal alias covers the command, check for legacy utilities and swap them to modern alternatives:
-   - sudo [command] -> sudo-rs [command]
-   - find [path] -name [pattern] -> fd [pattern] [path]
-   - grep [pattern] [file] -> rg [pattern] [file]
-   - sed 's/[old]/[new]/g' [file] -> sd '[old]' '[new]' [file]
-   - cat [file] | grep [pattern] -> rg [pattern] [file]
+1. PRIORITY 1 - TOTAL ALIAS MATCH: Carefully examine the functional intent of the input against the full personal alias matrix (especially matching pacman wrappers like psu, pss, psi). If an exact or partial match exists, you MUST output the 'Modern:' token mapped directly to that alias shortcut.
+2. PRIORITY 2 - MODERN SYSTEM BINARIES: If no personal alias covers the command, catch legacy utilities and swap them (e.g., find -> fd, grep -> rg, sed -> sd).
 3. OUTPUT FORMAT: Everything MUST be on a single line separated strictly by a literal pipe character ( | ). Do not use markdown backticks. Follow this exact template:
    Critique: [Explanation] | Legacy: [Original command] | Modern: [Optimized syntax or alias version]
 4. If no optimizations or alias matches apply, output exactly: IGNORE"
 
+    # COMPILING PAYLOAD WITH COMPACT REFLEX PROFILE
     PAYLOAD=$(jq -n \
-        --arg model "qwen3.5:9b" \
+        --arg model "qwen3.5:4b" \
         --arg sys "$SYS_PROMPT" \
         --arg user "$RAW_CMD" \
+        --arg re "none" \
         '{
             model: $model,
             messages: [
@@ -60,7 +68,8 @@ CRITICAL INSTRUCTIONS (STRICT HIERARCHY):
                 {role: "user", content: $user}
             ],
             temperature: 0.1,
-            max_tokens: 120
+            max_tokens: 120,
+            reasoning_effort: $re
         }')
 
     RESPONSE=$(curl -s http://127.0.0.1:52625/v1/chat/completions \
@@ -78,16 +87,10 @@ CRITICAL INSTRUCTIONS (STRICT HIERARCHY):
     local modern_val=$(echo "$AI_TEXT" | awk -F '|' '{for(i=1;i<=NF;i++) if($i ~ /Modern:/) print $i}' | sed 's/.*Modern: //;s/^[ \t]*//;s/[ \t]*$//')
     local legacy_val=$(echo "$AI_TEXT" | awk -F '|' '{for(i=1;i<=NF;i++) if($i ~ /Legacy:/) print $i}' | sed 's/.*Legacy: //;s/^[ \t]*//;s/[ \t]*$//')
 
-    # =========================================================================
     # HARDENED VERIFICATION GUARD
-    # =========================================================================
-    # 1. Drop if fields are empty or unparsed
-    # 2. Drop if Modern is identical to the raw user input or legacy block
-    # 3. Drop if Modern contains the word "IGNORE" (case-insensitive via uppercase zsh conversion)
     if [[ -z "$modern_val" || "$modern_val" == "$RAW_CMD" || "$modern_val" == "$legacy_val" || "${modern_val:u}" == *"IGNORE"* ]]; then
         continue
     fi
-    # =========================================================================
 
     echo "Evaluated: $RAW_CMD | Response: $AI_TEXT"
 
