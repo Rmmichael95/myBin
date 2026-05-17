@@ -1,25 +1,35 @@
 #!/usr/bin/env zsh
-# Systemd Journal Auditor via Qwen 4B
+# Systemd Journal Auditor via Deep Qwen 3.5 — Unified System + User Analysis
 
-# Pull the last 200 lines of priority 3 (err) or higher logs
-local LOGS=$(journalctl -p 3 -n 200 --no-pager)
+# 1. Pull from current boot only, split across both journal layers
+local SYSTEM_LOGS=$(journalctl -p 3 -n 100 -b --no-pager 2>/dev/null)
+local USER_LOGS=$(journalctl --user -p 3 -n 100 -b --no-pager 2>/dev/null)
 
-# Exit cleanly if there are no errors to report
-[[ -z "$LOGS" ]] && exit 0
+# Bail out cleanly if both streams are completely empty
+[[ -z "$SYSTEM_LOGS" && -z "$USER_LOGS" ]] && exit 0
+
+# 2. Formulate a structured text matrix for the NPU context window
+local LOGS="=== SYSTEM JOURNAL (err+) ===
+${SYSTEM_LOGS:-none}
+
+=== USER SESSION JOURNAL (err+) ===
+${USER_LOGS:-none}"
 
 local SAFE_LOGS=$(echo "$LOGS" | jq -Rs .)
 
-# Query the NPU
-local RESPONSE=$(curl -s http://localhost:52625/v1/chat/completions \
+# 3. Query the unified NPU engine with structural analysis tuning
+local RESPONSE=$(curl -s http://127.0.0.1:52625/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${FLM_API_KEY:-lemonade}" \
   -d "{
     \"model\": \"qwen3.5:4b\",
     \"temperature\": 0.1,
+    \"max_tokens\": 1500,
+    \"reasoning_effort\": \"high\",
     \"messages\": [
       {
         \"role\": \"system\",
-        \"content\": \"You are a strict Arch Linux kernel and systemd analyst. Review the provided journalctl logs. Ignore standard desktop application noise, harmless warnings, or temporary network drops. If you detect critical hardware degradation, ZFS/Btrfs corruption, OOM kills, or severe systemd looping, return a concise 2-bullet summary. If the logs are routine, reply ONLY with the word 'IGNORE'.\"
+        \"content\": \"You are a strict Arch Linux kernel and systemd analyst. Review the provided journalctl logs — both the system journal and the user session journal (UWSM/Hyprland/user services). Ignore standard desktop application noise, harmless warnings, or temporary network drops. If you detect critical hardware degradation, Btrfs corruption, OOM kills, severe systemd service restart loops, or compositor crashes, return a concise 2-bullet summary. If the logs are routine, reply ONLY with the word 'IGNORE'.\"
       },
       {
         \"role\": \"user\",
@@ -28,9 +38,10 @@ local RESPONSE=$(curl -s http://localhost:52625/v1/chat/completions \
     ]
   }")
 
-local EVALUATION=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+# 4. Strip the output from the JSON envelope safely
+local EVALUATION=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null)
 
-# Check if evaluation contains actual data and isn't just ignoring
-if [[ "$EVALUATION" != *"IGNORE"* && -n "$EVALUATION" ]]; then
+# 5. Route actionable critical items straight to your desktop notification system
+if [[ "$EVALUATION" != *"IGNORE"* && -n "$EVALUATION" && "$EVALUATION" != "null" ]]; then
     notify-send -u critical "NPU System Audit Warning" "$EVALUATION"
 fi
